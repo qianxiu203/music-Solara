@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
+const DEFAULT_API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
 
@@ -83,10 +83,41 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
   });
 }
 
-async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
-  const apiUrl = new URL(API_BASE_URL);
+async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise: Promise<any>) => void, apiBaseUrl: string = DEFAULT_API_BASE_URL): Promise<Response> {
+  const cache = caches.default;
+  
+  // 构建缓存 Key（过滤掉随机签名 s 以及强制刷新标记 nocache，以便重试成功后能更新同一个缓存项）
+  const cacheUrl = new URL(url.toString());
+  cacheUrl.searchParams.delete("s");
+  cacheUrl.searchParams.delete("nocache");
+  
+  const cacheKey = new Request(cacheUrl.toString(), {
+    method: request.method,
+    headers: request.headers
+  });
+
+  // 如果是 GET 请求且未指定 nocache 强制刷新，尝试命中缓存
+  const bypassCache = url.searchParams.get("nocache") === "true";
+  if (request.method === "GET" && !bypassCache) {
+    try {
+      const cachedResponse = await cache.match(cacheKey);
+      if (cachedResponse) {
+        console.log(`[Cache HIT] ${url.toString()}`);
+        const response = new Response(cachedResponse.body, cachedResponse);
+        response.headers.set("X-Cache-Status", "HIT");
+        response.headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
+        return response;
+      }
+    } catch (err) {
+      console.warn(`[Cache ERROR] ${url.toString()}`, err);
+    }
+  }
+
+  console.log(`[Cache MISS] Fetching from upstream: ${url.toString()}`);
+
+  const apiUrl = new URL(apiBaseUrl);
   url.searchParams.forEach((value, key) => {
-    if (key === "target" || key === "callback") {
+    if (key === "target" || key === "callback" || key === "s" || key === "nocache") {
       return;
     }
     apiUrl.searchParams.set(key, value);
@@ -103,19 +134,51 @@ async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
     },
   });
 
+  const responseText = await upstream.text();
   const headers = createCorsHeaders(upstream.headers);
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json; charset=utf-8");
   }
 
-  return new Response(upstream.body, {
+  headers.set("X-Cache-Status", "MISS");
+  headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
+
+  // 判断是否应该缓存：必须是 200 状态，且内容不能是空数组或包含错误标识，且未指定强制刷新
+  const isSearch = url.searchParams.get("types") === "search";
+  const isEmptyResult = responseText.trim() === "[]";
+  const isError = responseText.includes('"error"') || responseText.includes('"status":0');
+  
+  let shouldCache = upstream.status === 200 && request.method === "GET" && !isError && !bypassCache;
+  
+  // 如果是搜索请求且结果为空，通常是 API 繁忙或异常，不建议长缓存
+  if (isSearch && isEmptyResult) {
+    shouldCache = false;
+  }
+
+  if (shouldCache) {
+    headers.set("Cache-Control", "public, s-maxage=300, max-age=300");
+  } else {
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  }
+
+  const response = new Response(responseText, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers,
   });
+
+  // 写入缓存（不阻塞主流程）
+  if (shouldCache && waitUntil) {
+    waitUntil(cache.put(cacheKey, response.clone()));
+    console.log(`[Cache PUT] Saved to cache: ${url.toString()}`);
+  }
+
+  return response;
 }
 
-export async function onRequest({ request }: { request: Request }): Promise<Response> {
+export async function onRequest({ request, waitUntil, env }: { request: Request, waitUntil: (promise: Promise<any>) => void, env: any }): Promise<Response> {
+  // 优先使用环境变量中配置的 API 地址，CF 部署未设置时 fallback 到默认节点
+  const apiBaseUrl = (typeof env?.API_BASE_URL === "string" && env.API_BASE_URL) ? env.API_BASE_URL : DEFAULT_API_BASE_URL;
   if (request.method === "OPTIONS") {
     return handleOptions();
   }
@@ -131,5 +194,5 @@ export async function onRequest({ request }: { request: Request }): Promise<Resp
     return proxyKuwoAudio(target, request);
   }
 
-  return proxyApiRequest(url, request);
+  return proxyApiRequest(url, request, waitUntil, apiBaseUrl);
 }

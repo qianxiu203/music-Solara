@@ -77,7 +77,13 @@
         "解析播放列表文件失败": "Failed to parse playlist file",
         "导入成功": "Import successful",
         "导出成功": "Export successful",
-        "复制失败": "Copy failed"
+        "复制失败": "Copy failed",
+        "设置": "Settings",
+        "探索雷达风格": "Radar Styles",
+        "保存设置": "Save Settings",
+        "已保存设置": "Settings saved",
+        "请至少选择一个风格": "Please select at least one genre",
+        "云端加载设置失败": "Failed to load settings from cloud"
     };
 
     window.t = function (str) {
