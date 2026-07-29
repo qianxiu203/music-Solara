@@ -38,7 +38,7 @@
 3. 部署完成后，通过 Cloudflare Pages 分配的域名访问站点即可体验播放器。
 
 ## ⚙️ 配置提示
-- API 基地址定义在 functions/proxy.ts 中的第1行，可替换为自建接口域名。
+- 后端代理位于 `functions/proxy.ts`，默认请求 GD音乐台接口。项目已针对 Cloudflare Pages 做了响应缓存、错误处理与 CORS 优化，可直接部署使用。
 - 默认主题、播放模式等偏好可在 `state` 初始化逻辑中按需调整。
 
 ### ☁️ Cloudflare D1 绑定与建表

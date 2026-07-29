@@ -1,6 +1,7 @@
 const API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
+const STABLE_SOURCES = new Set(["netease", "joox", "bilibili"]);
 
 function createCorsHeaders(init?: Headers): Headers {
   const headers = new Headers();
@@ -10,9 +11,6 @@ function createCorsHeaders(init?: Headers): Headers {
         headers.set(key, value);
       }
     }
-  }
-  if (!headers.has("Cache-Control")) {
-    headers.set("Cache-Control", "no-store");
   }
   headers.set("Access-Control-Allow-Origin", "*");
   return headers;
@@ -83,6 +81,47 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
   });
 }
 
+function getCacheControl(types: string, source?: string): string {
+  if (types === "pic") {
+    return "public, max-age=86400, s-maxage=86400";
+  }
+  if (types === "lyric") {
+    return "public, max-age=3600, s-maxage=3600";
+  }
+  if (types === "url") {
+    return "public, max-age=3600, s-maxage=3600";
+  }
+  if (types === "search" || types === "playlist") {
+    if (source && STABLE_SOURCES.has(source)) {
+      return "public, max-age=30, s-maxage=60";
+    }
+    return "public, max-age=10, s-maxage=30";
+  }
+  return "public, max-age=30, s-maxage=60";
+}
+
+function enrichResponseHeaders(
+  headers: Headers,
+  upstreamHeaders: Headers,
+  types?: string,
+  source?: string
+): Headers {
+  if (upstreamHeaders.has("cache-control")) {
+    headers.set("cache-control", upstreamHeaders.get("cache-control") as string);
+  } else {
+    headers.set("cache-control", getCacheControl(types || "", source));
+  }
+
+  if (!headers.has("content-type") && upstreamHeaders.has("content-type")) {
+    headers.set("content-type", upstreamHeaders.get("content-type") as string);
+  }
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json; charset=utf-8");
+  }
+
+  return headers;
+}
+
 async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
   const apiUrl = new URL(API_BASE_URL);
   url.searchParams.forEach((value, key) => {
@@ -103,9 +142,23 @@ async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
     },
   });
 
-  const headers = createCorsHeaders(upstream.headers);
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json; charset=utf-8");
+  const source = apiUrl.searchParams.get("source") || "";
+  const types = apiUrl.searchParams.get("types") || "";
+  let headers = createCorsHeaders(upstream.headers);
+  headers = enrichResponseHeaders(headers, upstream.headers, types, source);
+
+  if (upstream.status === 429) {
+    return new Response(JSON.stringify({ error: "请求过于频繁，请稍后再试" }), {
+      status: 429,
+      headers,
+    });
+  }
+
+  if (!upstream.ok) {
+    return new Response(JSON.stringify({ error: `上游服务返回 ${upstream.status}` }), {
+      status: upstream.status,
+      headers,
+    });
   }
 
   return new Response(upstream.body, {

@@ -629,8 +629,11 @@ function buildAudioProxyUrl(url) {
             return parsedUrl.toString();
         }
 
-        if (parsedUrl.protocol === "http:" && /(^|\.)kuwo\.cn$/i.test(parsedUrl.hostname)) {
-            return `${API.baseUrl}?target=${encodeURIComponent(parsedUrl.toString())}`;
+        if (parsedUrl.protocol === "http:") {
+            const host = parsedUrl.hostname;
+            if (/(^|\.)kuwo\.cn$/i.test(host)) {
+                return `${API.baseUrl}?target=${encodeURIComponent(parsedUrl.toString())}`;
+            }
         }
 
         return parsedUrl.toString();
@@ -641,10 +644,10 @@ function buildAudioProxyUrl(url) {
 }
 
 const SOURCE_OPTIONS = [
-    { value: "netease", label: "网易云音乐" },
-    { value: "kuwo", label: "酷我音乐" },
-    { value: "joox", label: "JOOX音乐" },
-    { value: "bilibili", label: "哔哩哔哩" }
+    { value: "netease", label: "网易云音乐", stable: true },
+    { value: "kuwo", label: "酷我音乐", stable: true },
+    { value: "joox", label: "JOOX音乐", stable: true },
+    { value: "bilibili", label: "哔哩哔哩", stable: true }
 ];
 
 function normalizeSource(value) {
@@ -3321,6 +3324,25 @@ function setupInteractions() {
         }
     });
 
+    // 搜索防抖：避免频繁请求上游 API
+    let searchDebounceTimer = null;
+    const SEARCH_DEBOUNCE_DELAY = 400;
+
+    dom.searchInput.addEventListener("input", () => {
+        const query = dom.searchInput.value.trim();
+        if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = null;
+        }
+        if (!query) {
+            return;
+        }
+        searchDebounceTimer = setTimeout(() => {
+            searchDebounceTimer = null;
+            performSearch(true);
+        }, SEARCH_DEBOUNCE_DELAY);
+    });
+
     updateImportSelectedButton();
 
     // 修复：点击搜索区域外部时隐藏搜索结果
@@ -3612,7 +3634,10 @@ async function performSearch(isLiveSearch = false) {
 
     } catch (error) {
         console.error("搜索失败:", error);
-        showNotification("搜索失败，请稍后重试", "error");
+        const message = error && error.message && /429|rate|limit|频繁/i.test(error.message)
+            ? "请求过于频繁，请稍后再试"
+            : "搜索失败，请稍后重试";
+        showNotification(message, "error");
         hideSearchResults();
         debugLog(`搜索失败: ${error.message}`);
     } finally {
@@ -5585,7 +5610,7 @@ function pickRandomExploreGenre() {
     return EXPLORE_RADAR_GENRES[index];
 }
 
-const EXPLORE_RADAR_SOURCES = ["netease", "kuwo"];
+const EXPLORE_RADAR_SOURCES = ["netease", "joox", "bilibili"];
 
 function pickRandomExploreSource() {
     if (!Array.isArray(EXPLORE_RADAR_SOURCES) || EXPLORE_RADAR_SOURCES.length === 0) {
@@ -5691,19 +5716,70 @@ async function exploreOnlineMusic() {
     }
 }
 
+const LYRICS_STORAGE_KEY = "lyricsCache.v1";
+
+function getLyricsStorageKey(song) {
+    const id = song && typeof song === "object" ? (song.lyric_id || song.id || "") : "";
+    const source = song && typeof song === "object" ? (song.source || "") : "";
+    return `${source || "unknown"}:${id}`;
+}
+
+function getCachedLyrics(key) {
+    try {
+        const stored = safeGetLocalStorage(LYRICS_STORAGE_KEY);
+        if (!stored) return null;
+        const cache = JSON.parse(stored);
+        if (!cache || typeof cache !== "object") return null;
+        const entry = cache[key];
+        if (!entry || !entry.text || !entry.expires) return null;
+        if (Date.now() > entry.expires) return null;
+        return entry.text;
+    } catch {
+        return null;
+    }
+}
+
+function setCachedLyrics(key, text, ttlMs = 3600000) {
+    try {
+        const stored = safeGetLocalStorage(LYRICS_STORAGE_KEY);
+        const cache = stored ? JSON.parse(stored) : {};
+        cache[key] = {
+            text,
+            expires: Date.now() + ttlMs
+        };
+        safeSetLocalStorage(LYRICS_STORAGE_KEY, JSON.stringify(cache));
+    } catch {
+        // ignore storage errors
+    }
+}
+
 // 修复：加载歌词
 async function loadLyrics(song) {
     try {
+        const cacheKey = getLyricsStorageKey(song);
+        const cachedLyric = cacheKey ? getCachedLyrics(cacheKey) : null;
+        if (cachedLyric) {
+            parseLyrics(cachedLyric);
+            dom.lyrics.classList.remove("empty");
+            dom.lyrics.dataset.placeholder = "default";
+            debugLog("使用缓存歌词");
+            return;
+        }
+
         const lyricUrl = API.getLyric(song);
         debugLog(`获取歌词URL: ${lyricUrl}`);
 
         const lyricData = await API.fetchJson(lyricUrl);
 
-        if (lyricData && lyricData.lyric) {
-            parseLyrics(lyricData.lyric);
+        const lyricText = (lyricData && lyricData.lyric) ? lyricData.lyric : "";
+        if (lyricText) {
+            parseLyrics(lyricText);
             dom.lyrics.classList.remove("empty");
             dom.lyrics.dataset.placeholder = "default";
             debugLog(`歌词加载成功: ${state.lyricsData.length} 行`);
+            if (cacheKey) {
+                setCachedLyrics(cacheKey, lyricText);
+            }
         } else {
             setLyricsContentHtml("<div>暂无歌词</div>");
             dom.lyrics.classList.add("empty");
