@@ -1,6 +1,14 @@
 const API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
 
-const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
+const AUDIO_HOST_RULES: Array<{ pattern: RegExp; referer: string }> = [
+  { pattern: /(^|\.)kuwo\.cn$/i, referer: "https://www.kuwo.cn/" },
+  { pattern: /(^|\.)bilivideo\.com$/i, referer: "https://www.bilibili.com/" },
+  { pattern: /(^|\.)bilibili\.com$/i, referer: "https://www.bilibili.com/" },
+  { pattern: /(^|\.)hdslb\.com$/i, referer: "https://www.bilibili.com/" },
+  { pattern: /(^|\.)akamaized\.net$/i, referer: "https://www.bilibili.com/" },
+  { pattern: /(^|\.)joox\.com$/i, referer: "https://www.joox.com/" },
+];
+
 const STABLE_SOURCES = new Set(["netease", "joox", "bilibili"]);
 
 const SAFE_RESPONSE_HEADERS = [
@@ -160,22 +168,32 @@ async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
   });
 }
 
-function isAllowedAudioHost(hostname: string): boolean {
-  if (!hostname) return false;
-  return KUWO_HOST_PATTERN.test(hostname);
+function matchAudioRule(hostname: string): { pattern: RegExp; referer: string } | null {
+  if (!hostname) return null;
+  for (const rule of AUDIO_HOST_RULES) {
+    if (rule.pattern.test(hostname)) {
+      return rule;
+    }
+  }
+  return null;
 }
 
-function normalizeAudioUrl(rawUrl: string): URL | null {
+function isAllowedAudioHost(hostname: string): boolean {
+  return matchAudioRule(hostname) !== null;
+}
+
+function normalizeAudioUrl(rawUrl: string): { url: URL; referer: string } | null {
   try {
     const parsed = new URL(rawUrl);
-    if (!isAllowedAudioHost(parsed.hostname)) {
+    const rule = matchAudioRule(parsed.hostname);
+    if (!rule) {
       return null;
     }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return null;
     }
     parsed.protocol = "http:";
-    return parsed;
+    return { url: parsed, referer: rule.referer };
   } catch {
     return null;
   }
@@ -187,10 +205,10 @@ async function proxyAudioRequest(targetUrl: string, request: Request): Promise<R
     return jsonError(400, "invalid_target");
   }
 
-  const upstream = await fetch(normalized.toString(), {
+  const upstream = await fetch(normalized.url.toString(), {
     method: request.method,
     headers: buildUpstreamHeaders(request, {
-      Referer: "https://www.kuwo.cn/",
+      Referer: normalized.referer,
     }),
   }).catch(() => null);
 

@@ -620,23 +620,36 @@ function toAbsoluteUrl(url) {
     }
 }
 
+const AUDIO_PROXY_HOST_PATTERNS = [
+    /(^|\.)kuwo\.cn$/i,
+    /(^|\.)bilivideo\.com$/i,
+    /(^|\.)bilibili\.com$/i,
+    /(^|\.)hdslb\.com$/i,
+    /(^|\.)akamaized\.net$/i,
+    /(^|\.)joox\.com$/i,
+];
+
+function shouldProxyAudio(hostname) {
+    if (!hostname) return false;
+    return AUDIO_PROXY_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
 function buildAudioProxyUrl(url) {
     if (!url || typeof url !== "string") return url;
 
     try {
         const parsedUrl = new URL(url, window.location.href);
-        if (parsedUrl.protocol === "https:") {
+
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+            return url;
+        }
+
+        if (!shouldProxyAudio(parsedUrl.hostname)) {
             return parsedUrl.toString();
         }
 
-        if (parsedUrl.protocol === "http:") {
-            const host = parsedUrl.hostname;
-            if (/(^|\.)kuwo\.cn$/i.test(host)) {
-                return `${API.baseUrl}?target=${encodeURIComponent(parsedUrl.toString())}`;
-            }
-        }
-
-        return parsedUrl.toString();
+        parsedUrl.protocol = "http:";
+        return `${API.baseUrl}?target=${encodeURIComponent(parsedUrl.toString())}`;
     } catch (error) {
         console.warn("无法解析音频地址，跳过代理", error);
         return url;
@@ -645,7 +658,7 @@ function buildAudioProxyUrl(url) {
 
 const SOURCE_OPTIONS = [
     { value: "netease", label: "网易云音乐", stable: true },
-    { value: "kuwo", label: "酷我音乐", stable: true },
+    { value: "kuwo", label: "酷我音乐", stable: false, note: "GD Studio 当前可能不稳定" },
     { value: "joox", label: "JOOX音乐", stable: true },
     { value: "bilibili", label: "哔哩哔哩", stable: true }
 ];
