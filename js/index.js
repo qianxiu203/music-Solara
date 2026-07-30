@@ -764,13 +764,9 @@ const savedCurrentPlaylist = (() => {
     return playlists.includes(stored) ? stored : "playlist";
 })();
 
-// API配置 - 修复API地址和请求方式
+// API配置 - 对齐 GD Studio 文档
 const API = {
     baseUrl: "/proxy",
-
-    generateSignature: () => {
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    },
 
     fetchJson: async (url) => {
         try {
@@ -798,8 +794,14 @@ const API = {
     },
 
     search: async (keyword, source = "netease", count = 20, page = 1) => {
-        const signature = API.generateSignature();
-        const url = `${API.baseUrl}?types=search&source=${source}&name=${encodeURIComponent(keyword)}&count=${count}&pages=${page}&s=${signature}`;
+        const params = new URLSearchParams({
+            types: "search",
+            source,
+            name: keyword,
+            count: String(count),
+            pages: String(page),
+        });
+        const url = `${API.baseUrl}?${params.toString()}`;
 
         try {
             debugLog(`API请求: ${url}`);
@@ -825,40 +827,39 @@ const API = {
     },
 
     getRadarPlaylist: async (playlistId = "3778678", options = {}) => {
-        const signature = API.generateSignature();
-
-        let limit = 50;
-        let offset = 0;
+        let count = 50;
+        let pages = 1;
 
         if (typeof options === "number") {
-            limit = options;
+            count = options;
         } else if (options && typeof options === "object") {
-            if (Number.isFinite(options.limit)) {
-                limit = options.limit;
-            } else if (Number.isFinite(options.count)) {
-                limit = options.count;
+            if (Number.isFinite(options.count)) {
+                count = options.count;
+            } else if (Number.isFinite(options.limit)) {
+                count = options.limit;
             }
-            if (Number.isFinite(options.offset)) {
-                offset = options.offset;
+            if (Number.isFinite(options.pages)) {
+                pages = options.pages;
+            } else if (Number.isFinite(options.offset)) {
+                pages = Math.floor(options.offset / Math.max(count, 1)) + 1;
             }
         }
 
-        limit = Math.max(1, Math.min(200, Math.trunc(limit)) || 50);
-        offset = Math.max(0, Math.trunc(offset) || 0);
+        count = Math.max(1, Math.min(200, Math.trunc(count) || 50));
+        pages = Math.max(1, Math.trunc(pages) || 1);
 
         const params = new URLSearchParams({
             types: "playlist",
             id: playlistId,
-            limit: String(limit),
-            offset: String(offset),
-            s: signature,
+            count: String(count),
+            pages: String(pages),
         });
         const url = `${API.baseUrl}?${params.toString()}`;
 
         try {
             const data = await API.fetchJson(url);
             const tracks = data && data.playlist && Array.isArray(data.playlist.tracks)
-                ? data.playlist.tracks.slice(0, limit)
+                ? data.playlist.tracks.slice(0, count)
                 : [];
 
             if (tracks.length === 0) throw new Error("No tracks found");
@@ -878,18 +879,32 @@ const API = {
     },
 
     getSongUrl: (song, quality = "320") => {
-        const signature = API.generateSignature();
-        return `${API.baseUrl}?types=url&id=${song.id}&source=${song.source || "netease"}&br=${quality}&s=${signature}`;
+        const params = new URLSearchParams({
+            types: "url",
+            id: song.id,
+            source: song.source || "netease",
+            br: quality,
+        });
+        return `${API.baseUrl}?${params.toString()}`;
     },
 
     getLyric: (song) => {
-        const signature = API.generateSignature();
-        return `${API.baseUrl}?types=lyric&id=${song.lyric_id || song.id}&source=${song.source || "netease"}&s=${signature}`;
+        const params = new URLSearchParams({
+            types: "lyric",
+            id: song.lyric_id || song.id,
+            source: song.source || "netease",
+        });
+        return `${API.baseUrl}?${params.toString()}`;
     },
 
-    getPicUrl: (song) => {
-        const signature = API.generateSignature();
-        return `${API.baseUrl}?types=pic&id=${song.pic_id}&source=${song.source || "netease"}&size=300&s=${signature}`;
+    getPicUrl: (song, size = 300) => {
+        const params = new URLSearchParams({
+            types: "pic",
+            id: song.pic_id,
+            source: song.source || "netease",
+            size: String(size),
+        });
+        return `${API.baseUrl}?${params.toString()}`;
     }
 };
 

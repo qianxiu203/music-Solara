@@ -41,6 +41,32 @@
 - 后端代理位于 `functions/proxy.ts`，默认请求 GD音乐台接口。项目已针对 Cloudflare Pages 做了响应缓存、错误处理与 CORS 优化，可直接部署使用。
 - 默认主题、播放模式等偏好可在 `state` 初始化逻辑中按需调整。
 
+### 🆕 后端代理优化变更（GD Studio API 对齐）
+
+围绕 GD Studio 公开 API 文档（`https://music-api.gdstudio.xyz/api.php`）重新对齐 `functions/proxy.ts` 与前端 API 客户端：
+
+1. **参数语义对齐**：搜索/歌单接口使用上游 `count` / `pages` 翻页参数；封面接口支持 `size=300|500`。
+2. **缓存分档**：`pic` 缓存 7 天，`lyric` 缓存 1 天，`url` 缓存 10 分钟，`search/playlist` 缓存 10 秒（稳定源 30 秒）。上游若自带 `Cache-Control` 则透传覆盖。
+3. **限流与错误处理**：上游 429 透传 `Retry-After` 并返回 `{"error":"rate_limited"}`；上游 5xx 返回 `502 {"error":"upstream_unavailable"}`；缺失 `types` 返回 `400 {"error":"missing_types"}`。
+4. **音频白名单**：仅代理 `kuwo.cn` 主机的 `target` 直链，并强制 `Referer: https://www.kuwo.cn/`，避免代理被滥用。
+5. **前端简化**：移除伪造签名 `s`，改用标准 `URLSearchParams` 构造请求，`getPicUrl(song, size)` 支持自定义封面尺寸。
+6. **Cloudflare 兼容**：全部使用 Web 标准 `fetch` / `Headers` / `Response.body` 流式透传，不依赖 Node.js 内置模块，确保 Workers 免费套餐下运行。
+
+部署后可通过以下命令验证缓存头生效（替换为你的域名）：
+
+```bash
+curl -I "https://your-domain.pages.dev/proxy?types=pic&id=xxx&source=netease&size=300"
+curl -I "https://your-domain.pages.dev/proxy?types=lyric&id=xxx&source=netease"
+curl -I "https://your-domain.pages.dev/proxy?types=url&id=xxx&source=netease&br=320"
+curl -I "https://your-domain.pages.dev/proxy?types=search&source=netease&name=test&count=10&pages=1"
+```
+
+期望看到：
+- `types=pic`：`Cache-Control: public, max-age=86400, s-maxage=604800`
+- `types=lyric`：`Cache-Control: public, max-age=3600, s-maxage=86400`
+- `types=url`：`Cache-Control: public, max-age=600, s-maxage=600`
+- `types=search`：`Cache-Control: public, max-age=10, s-maxage=30`
+
 ### ☁️ Cloudflare D1 绑定与建表
 1. 在 Cloudflare Dashboard 的 **Workers & Pages → D1 → Create** 中新建数据库，建议命名为 `solara-db`（名称可自定）。
 2. 打开 Pages 项目设置，依次进入 **Settings → Functions → Bindings → Add binding → D1 Database**：
