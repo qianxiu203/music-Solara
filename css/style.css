@@ -61,6 +61,12 @@
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb-bg); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary-color); }
 
+:root {
+    color-scheme: light dark;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+}
+
 body {
     font-family: var(--font-main);
     display: flex;
@@ -73,6 +79,16 @@ body {
     color: var(--text-color);
     transition: color 0.5s;
     background-color: #0f0f0f;
+    font-synthesis: none;
+}
+
+img, video, audio {
+    max-width: 100%;
+    height: auto;
+}
+
+audio:not([controls]) {
+    display: none;
 }
 
 .background-stage {

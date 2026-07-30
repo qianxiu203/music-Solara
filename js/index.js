@@ -1975,20 +1975,44 @@ function saveFavoriteState(options = {}) {
 }
 
 // 调试日志函数
+const debugLogState = { lastFlush: 0, pending: [] };
+
+function flushDebugLog() {
+    const debugInfo = dom.debugInfo;
+    const fragment = document.createDocumentFragment();
+    debugLogState.pending.forEach((message) => {
+        const entry = document.createElement("div");
+        entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+        fragment.appendChild(entry);
+    });
+    debugInfo.appendChild(fragment);
+
+    while (debugInfo.childNodes.length > 50) {
+        debugInfo.removeChild(debugInfo.firstChild);
+    }
+
+    debugInfo.classList.add("show");
+    debugInfo.scrollTop = debugInfo.scrollHeight;
+    debugLogState.pending = [];
+    debugLogState.lastFlush = Date.now();
+}
+
 function debugLog(message) {
     console.log(`[DEBUG] ${message}`);
     if (state.debugMode) {
-        const debugInfo = dom.debugInfo;
-        const entry = document.createElement("div");
-        entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
-        debugInfo.appendChild(entry);
-
-        while (debugInfo.childNodes.length > 50) {
-            debugInfo.removeChild(debugInfo.firstChild);
+        debugLogState.pending.push(message);
+        const now = Date.now();
+        if (now - debugLogState.lastFlush > 120) {
+            flushDebugLog();
+        } else if (!debugLogState._scheduled) {
+            debugLogState._scheduled = true;
+            setTimeout(() => {
+                debugLogState._scheduled = false;
+                if (debugLogState.pending.length > 0) {
+                    flushDebugLog();
+                }
+            }, 120);
         }
-
-        debugInfo.classList.add("show");
-        debugInfo.scrollTop = debugInfo.scrollHeight;
     }
 }
 

@@ -14,7 +14,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"></noscript>
     <link rel="stylesheet" href="css/style.css">
     <script src="js/i18n.js"></script>
     <script>
@@ -502,7 +503,7 @@
 
     <div class="mobile-overlay-scrim" id="mobileOverlayScrim"></div>
 
-    <audio id="audioPlayer" preload="metadata" playsinline></audio>
+    <audio id="audioPlayer" preload="metadata" playsinline crossorigin="anonymous"></audio>
 
 <!-- 通知容器 -->
 <div id="notification" class="notification"></div>
@@ -510,8 +511,8 @@
 <!-- 调试信息容器 -->
 <div id="debugInfo" class="debug-info"></div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="js/index.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" defer></script>
+<script src="js/index.js" defer></script>
 <script>
     if (window.__SOLARA_IS_MOBILE) {
         const mobileScript = document.createElement('script');
