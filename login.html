@@ -2,15 +2,22 @@
 <html lang="zh-CN" class="login-page-root">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>登录 - Solara</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet"
+    media="print" onload="this.media='all'">
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  </noscript>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" media="print" onload="this.media='all'">
+  <noscript>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  </noscript>
   <link rel="stylesheet" href="css/style.css">
   <script src="js/i18n.js"></script>
   <script>
@@ -379,8 +386,9 @@
       letter-spacing: 1px;
       text-transform: uppercase;
       cursor: pointer;
-      transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.3s ease;
+      transition: transform var(--transition-base, 220ms ease), box-shadow var(--transition-base, 220ms ease), background 0.3s ease;
       box-shadow: 0 18px 35px rgba(42, 201, 165, 0.35);
+      min-height: 48px;
     }
 
     .login-form button:hover {
@@ -389,8 +397,23 @@
     }
 
     .login-form button:active {
-      transform: translateY(0);
+      transform: translateY(0) scale(0.98);
       box-shadow: 0 14px 28px rgba(42, 201, 165, 0.35);
+    }
+
+    .login-form button:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(51, 211, 175, 0.45), 0 18px 35px rgba(42, 201, 165, 0.35);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .background-stage__layer,
+      .background-stage__layer::after {
+        animation: none;
+      }
+      .login-form button:hover {
+        transform: none;
+      }
     }
 
     .login-footer {
@@ -493,11 +516,14 @@
           <label for="password" class="field-label">访问口令</label>
           <div class="input-wrapper">
             <i class="fa-solid fa-lock" aria-hidden="true"></i>
-            <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password" required
+            <input type="password" id="password" placeholder="请输入密码"
+              autocomplete="current-password" autocapitalize="off" autocorrect="off"
+              spellcheck="false" inputmode="text" required
+              aria-describedby="login-hint"
               oninput="this.value = this.value.replace(/[^\x00-\x7F]/g, '')">
           </div>
         </div>
-        <p class="login-hint">只有输入了正确口令的成员才能继续访问内容。</p>
+        <p class="login-hint" id="login-hint">只有输入了正确口令的成员才能继续访问内容。</p>
         <button type="submit">进入 Solara</button>
       </form>
       <footer class="login-footer" aria-live="polite">
